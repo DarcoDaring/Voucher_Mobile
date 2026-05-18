@@ -31,6 +31,14 @@ class _VoucherListScreenState extends State<VoucherListScreen> {
     _load();
   }
 
+  // ── CHANGE 3: Returns true when this PENDING voucher is waiting on [currentUsername] ──
+  bool _needsMyApproval(VoucherSummary v, String currentUsername) {
+    if (v.status != 'PENDING') return false;
+    final raw = v.waitingForUsername;
+    if (raw == null || raw.isEmpty) return false;
+    return raw.split(',').map((u) => u.trim()).contains(currentUsername);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -38,6 +46,18 @@ class _VoucherListScreenState extends State<VoucherListScreen> {
     });
     try {
       final list = await ApiService.instance.getVouchers(status: _statusFilter);
+
+      // ── CHANGE 3: sort "needs my approval" vouchers to the top ──
+      final currentUsername =
+          ApiService.instance.currentUser?.username ?? '';
+      list.sort((a, b) {
+        final aNeedsMe = _needsMyApproval(a, currentUsername);
+        final bNeedsMe = _needsMyApproval(b, currentUsername);
+        if (aNeedsMe && !bNeedsMe) return -1;
+        if (!aNeedsMe && bNeedsMe) return 1;
+        return 0; // preserve server order for equal items
+      });
+
       if (mounted) setState(() { _vouchers = list; _loading = false; });
     } on ApiException catch (e) {
       if (mounted) setState(() { _error = e.message; _loading = false; });
@@ -232,17 +252,17 @@ class _VoucherListScreenState extends State<VoucherListScreen> {
                         setState(() => _statusFilter = f.$2);
                         _load();
                       },
-                      backgroundColor: Colors.white,             // ← fixed
+                      backgroundColor: Colors.white,
                       selectedColor: f.$3,
                       checkmarkColor: f.$4,
                       labelStyle: TextStyle(
-                        color: selected ? f.$4 : Colors.black87, // ← fixed
+                        color: selected ? f.$4 : Colors.black87,
                         fontWeight:
                             selected ? FontWeight.w600 : FontWeight.normal,
                       ),
                       side: selected
                           ? BorderSide(color: f.$5.withOpacity(0.5))
-                          : BorderSide(color: Colors.grey.shade300), // ← fixed
+                          : BorderSide(color: Colors.grey.shade300),
                     ),
                   );
                 }).toList(),
